@@ -1,13 +1,44 @@
-// Store blocked game IDs
+A// Store blocked game IDs
 let blockedGames = [];
 
-// Load blocked games from storage
-chrome.storage.sync.get(['blockedGames'], function(result) {
-    if (result.blockedGames) {
-        blockedGames = result.blockedGames;
+// Load blocked games from storage with error handling
+function loadBlockedGamesFromStorage() {
+    return new Promise((resolve, reject) => {
+        chrome.storage.sync.get(['blockedGames'], function(result) {
+            if (chrome.runtime.lastError) {
+                console.error('Error loading blocked games:', chrome.runtime.lastError);
+                reject(chrome.runtime.lastError);
+                return;
+            }
+            blockedGames = result.blockedGames || [];
+            resolve(blockedGames);
+        });
+    });
+}
+
+// Save blocked games to storage with error handling
+function saveBlockedGamesToStorage(games) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.sync.set({ 'blockedGames': games }, function() {
+            if (chrome.runtime.lastError) {
+                console.error('Error saving blocked games:', chrome.runtime.lastError);
+                reject(chrome.runtime.lastError);
+                return;
+            }
+            resolve();
+        });
+    });
+}
+
+// Initialize storage and load blocked games
+async function initializeStorage() {
+    try {
+        await loadBlockedGamesFromStorage();
         hideBlockedGames();
+    } catch (error) {
+        console.error('Failed to initialize storage:', error);
     }
-});
+}
 
 function getGameId(element) {
     // Try getting ID from home page format first
@@ -47,13 +78,17 @@ function addBlockButtons() {
             blockBtn.innerHTML = '✖';
             blockBtn.title = 'Block this game';
             
-            blockBtn.addEventListener('click', (e) => {
+            blockBtn.addEventListener('click', async (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 if (!blockedGames.some(game => game.id === gameId)) {
-                    blockedGames.push({ id: gameId, title: gameTitle });
-                    chrome.storage.sync.set({ 'blockedGames': blockedGames });
-                    card.remove();
+                    try {
+                        blockedGames.push({ id: gameId, title: gameTitle });
+                        await saveBlockedGamesToStorage(blockedGames);
+                        card.remove();
+                    } catch (error) {
+                        console.error('Failed to block game:', error);
+                    }
                 }
             });
             
@@ -79,21 +114,24 @@ function addBlockButtons() {
             blockBtn.innerHTML = '✖';
             blockBtn.title = 'Block this game';
             
-            blockBtn.addEventListener('click', (e) => {
+            blockBtn.addEventListener('click', async (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 if (!blockedGames.some(game => game.id === gameId)) {
-                    blockedGames.push({ id: gameId, title: gameTitle });
-                    chrome.storage.sync.set({ 'blockedGames': blockedGames });
-                    const parentDiv = card.parentElement;
-                    if (parentDiv) {
-                        // Find the closest li parent and remove it
-                        const listItem = parentDiv.closest('li');
-                        if (listItem) {
-                            listItem.remove();
-                        } else {
-                            parentDiv.remove();
+                    try {
+                        blockedGames.push({ id: gameId, title: gameTitle });
+                        await saveBlockedGamesToStorage(blockedGames);
+                        const parentDiv = card.parentElement;
+                        if (parentDiv) {
+                            const listItem = parentDiv.closest('li');
+                            if (listItem) {
+                                listItem.remove();
+                            } else {
+                                parentDiv.remove();
+                            }
                         }
+                    } catch (error) {
+                        console.error('Failed to block game:', error);
                     }
                 }
             });
@@ -169,12 +207,12 @@ function addGamePageBlockButton() {
     blockBtn.classList.add('blocked');
   }
   
-  blockBtn.addEventListener('click', (e) => {
+  blockBtn.addEventListener('click', async (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (!blockedGames.some(game => game.id === universeId)) {
       blockedGames.push({ id: universeId, title: gameTitle });
-      chrome.storage.sync.set({ 'blockedGames': blockedGames });
+      await saveBlockedGamesToStorage(blockedGames);
       blockBtn.classList.add('blocked');
     }
   });
@@ -185,36 +223,38 @@ function addGamePageBlockButton() {
 
 // Modify the existing initialization code
 function init() {
-  if (isGamePage()) {
-    addGamePageBlockButton();
-  } else if (window.location.pathname === '/home' || window.location.pathname === '/') {
-    // For home page, wait for content to be stable
-    const checkForContent = () => {
-      const gameCards = document.querySelectorAll('.game-card-link');
-      if (gameCards.length > 0) {
-        // Wait an additional second for any dynamic content to settle
-        setTimeout(() => {
-          hideBlockedGames();
-          // Start observing after initial load
-          observer.observe(document.body, {
-            childList: true,
-            subtree: true
-          });
-        }, 1000);
-      } else {
-        // Check again in 500ms if no game cards found
-        setTimeout(checkForContent, 500);
-      }
-    };
-    checkForContent();
-  } else {
-    // For other pages, proceed as normal
-    hideBlockedGames();
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
+    initializeStorage().then(() => {
+        if (isGamePage()) {
+            addGamePageBlockButton();
+        } else if (window.location.pathname === '/home' || window.location.pathname === '/') {
+            // For home page, wait for content to be stable
+            const checkForContent = () => {
+                const gameCards = document.querySelectorAll('.game-card-link');
+                if (gameCards.length > 0) {
+                    // Wait an additional second for any dynamic content to settle
+                    setTimeout(() => {
+                        hideBlockedGames();
+                        // Start observing after initial load
+                        observer.observe(document.body, {
+                            childList: true,
+                            subtree: true
+                        });
+                    }, 1000);
+                } else {
+                    // Check again in 500ms if no game cards found
+                    setTimeout(checkForContent, 500);
+                }
+            };
+            checkForContent();
+        } else {
+            // For other pages, proceed as normal
+            hideBlockedGames();
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        }
     });
-  }
 }
 
 // Call init when DOM is ready

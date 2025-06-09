@@ -1,6 +1,12 @@
-// Load and display blocked games
+// Load and display blocked games with error handling
 function loadBlockedGames(searchTerm = '') {
   chrome.storage.sync.get(['blockedGames'], function(result) {
+    if (chrome.runtime.lastError) {
+      console.error('Error loading blocked games:', chrome.runtime.lastError);
+      document.getElementById('blocked-list').innerHTML = '<p>Error loading blocked games</p>';
+      return;
+    }
+
     const blockedList = document.getElementById('blocked-list');
     blockedList.innerHTML = '';
     
@@ -56,23 +62,38 @@ document.getElementById('search-input').addEventListener('input', function(e) {
   loadBlockedGames(e.target.value.trim());
 });
 
-// Handle removing games
+// Handle removing games with error handling
 document.addEventListener('click', function(e) {
   if (e.target.classList.contains('remove-btn')) {
     const gameId = e.target.getAttribute('data-id');
     chrome.storage.sync.get(['blockedGames'], function(result) {
+      if (chrome.runtime.lastError) {
+        console.error('Error loading blocked games:', chrome.runtime.lastError);
+        return;
+      }
+
       const blockedGames = result.blockedGames || [];
       const updatedGames = blockedGames.filter(game => game.id !== gameId);
+      
       chrome.storage.sync.set({ 'blockedGames': updatedGames }, function() {
+        if (chrome.runtime.lastError) {
+          console.error('Error saving blocked games:', chrome.runtime.lastError);
+          return;
+        }
         loadBlockedGames();
       });
     });
   }
 });
 
-// Export functionality
+// Export functionality with error handling
 document.getElementById('export-btn').addEventListener('click', function() {
   chrome.storage.sync.get(['blockedGames'], function(result) {
+    if (chrome.runtime.lastError) {
+      console.error('Error loading blocked games:', chrome.runtime.lastError);
+      return;
+    }
+
     const dataStr = JSON.stringify(result.blockedGames || []);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
     
@@ -83,7 +104,7 @@ document.getElementById('export-btn').addEventListener('click', function() {
   });
 });
 
-// Import functionality
+// Import functionality with error handling
 document.getElementById('import-btn').addEventListener('click', function() {
   document.getElementById('import-input').click();
 });
@@ -97,18 +118,22 @@ document.getElementById('import-input').addEventListener('change', function(e) {
         const importedGames = JSON.parse(e.target.result);
         if (Array.isArray(importedGames)) {
           chrome.storage.sync.set({ 'blockedGames': importedGames }, function() {
+            if (chrome.runtime.lastError) {
+              console.error('Error importing games:', chrome.runtime.lastError);
+              return;
+            }
             loadBlockedGames();
           });
         }
       } catch (error) {
-        console.error('Invalid file format');
+        console.error('Invalid file format:', error);
       }
     };
     reader.readAsText(file);
   }
 });
 
-// Initial load
+// Initial load with error handling
 document.addEventListener('DOMContentLoaded', function() {
     // Clear search input on popup open
     document.getElementById('search-input').value = '';
