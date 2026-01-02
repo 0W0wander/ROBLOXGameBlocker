@@ -37,13 +37,29 @@
 .game-card:hover .game-block-btn,
 .list-item:hover .game-block-btn,
 .game-card-link:hover .game-block-btn,
-.game-calls-to-action:hover .game-block-btn {
+.game-calls-to-action:hover .game-block-btn,
+.game-tile:hover .game-block-btn,
+.game-card-container:hover .game-block-btn,
+.hover-game-tile:hover .game-block-btn,
+.featured-game-container:hover .game-block-btn,
+.grid-item-container:hover .game-block-btn,
+.featured-grid-item-container:hover .game-block-btn,
+a[href*="/games/"]:hover .game-block-btn,
+[class*="thumbnail"]:hover .game-block-btn {
     opacity: 1;
 }
 
 .game-thumbnail-container {
     position: relative;
-} 
+}
+
+/* Ensure thumbnail containers have position relative for absolute button positioning */
+.thumbnail-2d-container,
+.game-card-thumb-container,
+.brief-game-icon,
+.featured-game-icon-container {
+    position: relative !important;
+}
 
 .game-page-block-btn {
     position: absolute;
