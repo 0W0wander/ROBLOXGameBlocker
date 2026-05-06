@@ -1,0 +1,75 @@
+.game-block-btn {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    opacity: 0;
+    transition: all 0.2s ease-in-out;
+}
+
+.game-block-btn:hover {
+    background-color: #45a049;
+    transform: scale(1.1);
+    opacity: 1;
+}
+
+.game-block-btn.blocked {
+    background-color: #ff0000;
+    opacity: 1;
+}
+
+.game-block-btn.blocked:hover {
+    background-color: #cc0000;
+}
+
+/* Show button when hovering over containers */
+.game-card:hover .game-block-btn,
+.list-item:hover .game-block-btn,
+.game-card-link:hover .game-block-btn,
+.game-calls-to-action:hover .game-block-btn,
+.game-tile:hover .game-block-btn,
+.game-card-container:hover .game-block-btn,
+.hover-game-tile:hover .game-block-btn,
+.featured-game-container:hover .game-block-btn,
+.grid-item-container:hover .game-block-btn,
+.featured-grid-item-container:hover .game-block-btn,
+a[href*="/games/"]:hover .game-block-btn,
+[class*="thumbnail"]:hover .game-block-btn {
+    opacity: 1;
+}
+
+.game-thumbnail-container {
+    position: relative;
+}
+
+
+.game-page-block-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background-color: #ff0000;
+    opacity: 1;
+    width: 30px;
+    height: 30px;
+    font-size: 16px;
+    z-index: 100;
+}
+
+.game-page-block-btn:hover {
+    background-color: #cc0000;
+}
+
+.game-calls-to-action {
+    position: relative !important;
+} 

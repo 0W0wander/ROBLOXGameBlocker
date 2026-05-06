@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Roblox Game Blocker",
+  "version": "0.0.0.8",
+  "description": "Hide unwanted Roblox games from your feed. Block games by ID or keywords with AND logic.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*.roblox.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "32": "icon32.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.roblox.com/*"],
+      "exclude_matches": ["*://*.roblox.com/catalog*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["blocked.html", "blocked.js"],
+      "matches": ["*://*.roblox.com/*"]
+    }
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "32": "icon32.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "author": "catcatcut"
+} 
