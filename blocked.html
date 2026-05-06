@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Blocked</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        
+        .container {
+            text-align: center;
+            padding: 50px;
+            background: #252525;
+            border: 1px solid #333;
+            border-radius: 8px;
+            max-width: 500px;
+        }
+        
+        .icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #666;
+        }
+        
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 15px;
+            color: #fff;
+            font-weight: 600;
+        }
+        
+        p {
+            font-size: 0.95rem;
+            color: #888;
+            margin-bottom: 12px;
+            line-height: 1.5;
+        }
+        
+        .game-name {
+            font-weight: 600;
+            color: #ccc;
+            margin: 20px 0;
+            padding: 12px 20px;
+            background: #1a1a1a;
+            border-left: 3px solid #555;
+            display: inline-block;
+            font-size: 0.95rem;
+        }
+        
+        .btn-container {
+            margin-top: 30px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+        
+        .btn {
+            padding: 12px 28px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 500;
+            text-decoration: none;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        
+        .btn-primary {
+            background: #444;
+            color: #fff;
+        }
+        
+        .btn-primary:hover {
+            background: #555;
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            color: #888;
+            border: 1px solid #444;
+        }
+        
+        .btn-secondary:hover {
+            border-color: #666;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">X</div>
+        <h1>Game Blocked</h1>
+        <p>This game has been blocked by the Roblox Game Blocker extension.</p>
+        <div class="game-name" id="game-name"></div>
+        <p>You can unblock this game from the extension popup.</p>
+        
+        <div class="btn-container">
+            <a href="https://www.roblox.com/home" class="btn btn-primary">Go Home</a>
+            <button class="btn btn-secondary" id="go-back-btn">Go Back</button>
+        </div>
+    </div>
+    
+    <script src="blocked.js"></script>
+</body>
+</html>

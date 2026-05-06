@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Roblox Game Blocker",
-  "version": "0.0.0.4",
-  "description": "Hide unwanted Roblox games from your feed. Block games with one click and manage your blocked list easily.",
+  "version": "0.0.0.8",
+  "description": "Hide unwanted Roblox games from your feed. Block games by ID or keywords with AND logic.",
   "permissions": [
     "storage"
   ],
@@ -21,8 +21,16 @@
   "content_scripts": [
     {
       "matches": ["*://*.roblox.com/*"],
+      "exclude_matches": ["*://*.roblox.com/catalog*"],
       "js": ["content.js"],
-      "css": ["styles.css"]
+      "css": ["styles.css"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["blocked.html", "blocked.js"],
+      "matches": ["*://*.roblox.com/*"]
     }
   ],
   "icons": {
