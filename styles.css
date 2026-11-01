@@ -72,4 +72,27 @@ a[href*="/games/"]:hover .game-block-btn,
 
 .game-calls-to-action {
     position: relative !important;
+}
+
+/* Developer ⋯ menu (only present for creators) currently shares the top-right
+   corner with the block button. Shift it left of the X and keep the dropdown
+   above the button so both stay clickable. */
+.game-calls-to-action:has(.game-block-btn) #game-context-menu {
+    right: 34px !important;
+    z-index: 1001 !important;
+}
+
+.game-calls-to-action:has(.game-block-btn) .game-title-container {
+    padding-right: 52px !important;
+}
+
+@media (max-width: 992px) {
+    .game-calls-to-action:has(.game-block-btn) #game-context-menu {
+        right: auto !important;
+        margin-right: 8px;
+    }
+}
+
+.rgb-friend-game-hidden {
+    display: none !important;
 } 

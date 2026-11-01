@@ -75,6 +75,7 @@ async function initializeStorage() {
     try {
         await loadBlockedGamesFromStorage();
         hideBlockedGames();
+        startFriendJoinGuard();
     } catch (error) {
         console.error('Failed to initialize storage:', error);
     }
@@ -107,6 +108,14 @@ function getGameId(element) {
     return gameId;
 }
 
+function getPlaceIdFromElement(element) {
+    const link = element.matches?.('a[href*="/games/"]')
+        ? element
+        : element.querySelector?.('a[href*="/games/"]');
+    const match = link?.href?.match(/\/games\/(\d+)/);
+    return match ? match[1] : null;
+}
+
 // Helper to find the best element to remove when blocking
 function findRemovableParent(element) {
     // Try to find the list item first
@@ -124,7 +133,7 @@ function findRemovableParent(element) {
 }
 
 // Helper to create and attach block button
-function createBlockButton(gameId, gameTitle, removeElement) {
+function createBlockButton(gameId, gameTitle, removeElement, placeId) {
     const blockBtn = document.createElement('button');
     blockBtn.className = 'game-block-btn';
     blockBtn.innerHTML = '✖';
@@ -135,7 +144,12 @@ function createBlockButton(gameId, gameTitle, removeElement) {
         e.stopPropagation();
         if (!blockedGames.some(game => game.id === gameId)) {
             try {
-                blockedGames.push({ id: gameId, title: gameTitle });
+                const entry = { id: gameId, title: gameTitle };
+                if (placeId) {
+                    entry.placeId = String(placeId);
+                    placeToUniverse.set(String(placeId), String(gameId));
+                }
+                blockedGames.push(entry);
                 await saveBlockedGamesToStorage(blockedGames);
                 if (removeElement) {
                     removeElement.remove();
@@ -171,7 +185,7 @@ function addBlockButtons() {
                          gameId;
         
         const removeElement = findRemovableParent(link);
-        const blockBtn = createBlockButton(gameId, gameTitle, removeElement);
+        const blockBtn = createBlockButton(gameId, gameTitle, removeElement, getPlaceIdFromElement(link));
         
         cardContainer.style.position = 'relative';
         cardContainer.appendChild(blockBtn);
@@ -193,7 +207,7 @@ function addBlockButtons() {
                          (titleElement.textContent?.trim() || titleElement.alt || titleElement.title || gameId) : 
                          gameId;
         
-        const blockBtn = createBlockButton(gameId, gameTitle, tile);
+        const blockBtn = createBlockButton(gameId, gameTitle, tile, getPlaceIdFromElement(tile));
         
         // Wide tiles use brief-game-icon class for thumbnail
         const thumbnailContainer = tile.querySelector('.thumbnail-2d-container') ||
@@ -219,7 +233,7 @@ function addBlockButtons() {
         const titleElement = card.querySelector('.game-card-name') || card.querySelector('[title]');
         const gameTitle = titleElement ? titleElement.textContent.trim() : gameId;
         
-        const blockBtn = createBlockButton(gameId, gameTitle, card);
+        const blockBtn = createBlockButton(gameId, gameTitle, card, getPlaceIdFromElement(card));
         
         // Prefer .game-card-container (parent of <a>) so other-extension overlays on the
         // <a> tag don't intercept clicks. Fall back to the thumbnail container if absent.
@@ -346,9 +360,192 @@ function hideBlockedGames() {
 }
 
 // Create an observer to watch for new game cards
+const placeToUniverse = new Map();
+const pendingUniverseLookups = new Map();
+let lastPlaceIndexAt = 0;
+let friendJoinGuardStarted = false;
+
+function rememberSavedPlaces() {
+    blockedGames.forEach(game => {
+        if (game.placeId && game.id) {
+            placeToUniverse.set(String(game.placeId), String(game.id));
+        }
+    });
+}
+
+function indexGamePlaces(root) {
+    const now = Date.now();
+    if (root === document && now - lastPlaceIndexAt < 2000) return;
+    if (root === document) lastPlaceIndexAt = now;
+
+    const scope = root && root.querySelectorAll ? root : document;
+    scope.querySelectorAll('a[href*="/games/"]').forEach(link => {
+        const placeMatch = link.href.match(/\/games\/(\d+)/);
+        if (!placeMatch) return;
+
+        let universeId = /^\d+$/.test(link.id) ? link.id : '';
+        if (!universeId) {
+            try {
+                universeId = new URL(link.href).searchParams.get('universeId') || '';
+            } catch (error) {
+                universeId = '';
+            }
+        }
+        if (universeId) placeToUniverse.set(placeMatch[1], universeId);
+    });
+}
+
+function compactTitle(value) {
+    let text = String(value || '').toLowerCase().normalize('NFKD');
+    try {
+        text = text.replace(/\p{Extended_Pictographic}/gu, '');
+    } catch (error) {
+        // Older engines without Unicode property escapes still match plain titles.
+    }
+    return text
+        .replace(/\[[^\]]*\]/g, ' ')
+        .replace(/[^a-z0-9]+/g, '');
+}
+
+function titlesMatch(presenceTitle, blockedTitle) {
+    const presence = compactTitle(presenceTitle);
+    const blocked = compactTitle(blockedTitle);
+    if (presence.length < 3 || blocked.length < 3) return false;
+    if (presence === blocked) return true;
+    const shorter = presence.length < blocked.length ? presence : blocked;
+    const longer = presence.length < blocked.length ? blocked : presence;
+    return shorter.length >= 4 && longer.includes(shorter);
+}
+
+function isUniverseBlocked(universeId) {
+    return blockedGames.some(game => String(game.id) === String(universeId));
+}
+
+function isPlaceBlocked(placeId) {
+    if (!placeId) return false;
+    if (blockedGames.some(game => game.placeId && String(game.placeId) === String(placeId))) return true;
+    const universeId = placeToUniverse.get(String(placeId));
+    return universeId ? isUniverseBlocked(universeId) : false;
+}
+
+function isPresenceTitleBlocked(gameName) {
+    if (!gameName) return false;
+    if (isBlockedByKeywords(gameName)) return true;
+    return blockedGames.some(game => titlesMatch(gameName, game.title));
+}
+
+function friendJoinButton(card) {
+    const actions = card.querySelector('.in-game-friend-card-actions');
+    if (!actions) return null;
+    return actions.querySelector('button.bg-action-emphasis')
+        || [...actions.querySelectorAll('button')].find(btn => btn.textContent.trim().toLowerCase() === 'join')
+        || null;
+}
+
+function friendCardPlaceId(card) {
+    const href = card.querySelector('a[href*="/games/"]')?.href || '';
+    return href.match(/\/games\/(\d+)/)?.[1] || '';
+}
+
+function friendCardGameName(card) {
+    return card.querySelector('.friend-tile-game-name')?.textContent?.trim() || '';
+}
+
+function isFriendCardBlockedSync(card) {
+    return isPlaceBlocked(friendCardPlaceId(card)) || isPresenceTitleBlocked(friendCardGameName(card));
+}
+
+function setFriendJoinHidden(card, hidden) {
+    const gameLink = card.querySelector('a[href*="/games/"]');
+    const joinBtn = friendJoinButton(card);
+    [gameLink, joinBtn].forEach(el => {
+        if (el) el.classList.toggle('rgb-friend-game-hidden', hidden);
+    });
+}
+
+function lookupUniverseId(placeId) {
+    const key = String(placeId);
+    if (placeToUniverse.has(key)) return Promise.resolve(placeToUniverse.get(key));
+    if (pendingUniverseLookups.has(key)) return pendingUniverseLookups.get(key);
+
+    const request = fetch(`https://apis.roblox.com/universes/v1/places/${key}/universe`, { credentials: 'omit' })
+        .then(response => response.ok ? response.json() : null)
+        .then(data => {
+            const universeId = data && data.universeId ? String(data.universeId) : '';
+            if (universeId) placeToUniverse.set(key, universeId);
+            return universeId;
+        })
+        .catch(() => '')
+        .finally(() => pendingUniverseLookups.delete(key));
+
+    pendingUniverseLookups.set(key, request);
+    return request;
+}
+
+function suppressBlockedFriendJoins() {
+    rememberSavedPlaces();
+    const cards = document.querySelectorAll('.in-game-friend-card--iarc');
+    if (!cards.length) return;
+
+    indexGamePlaces(document);
+    cards.forEach(card => {
+        const placeId = friendCardPlaceId(card);
+        const blocked = isFriendCardBlockedSync(card);
+        setFriendJoinHidden(card, blocked);
+        if (blocked || !placeId || card.dataset.rgbPlaceChecked === placeId) return;
+
+        card.dataset.rgbPlaceChecked = placeId;
+        lookupUniverseId(placeId).then(universeId => {
+            if (!card.isConnected) return;
+            if (universeId && isUniverseBlocked(universeId)) {
+                setFriendJoinHidden(card, true);
+                return;
+            }
+            if (!universeId && card.dataset.rgbPlaceChecked === placeId) {
+                delete card.dataset.rgbPlaceChecked;
+            }
+        });
+    });
+}
+
+function startFriendJoinGuard() {
+    if (friendJoinGuardStarted) {
+        suppressBlockedFriendJoins();
+        return;
+    }
+    friendJoinGuardStarted = true;
+
+    const onFriendJoin = (event) => {
+        const card = event.target.closest?.('.in-game-friend-card--iarc, .friend-tile-dropdown');
+        if (!card || !isFriendCardBlockedSync(card)) return;
+
+        const joinBtn = event.target.closest('button');
+        const gameLink = event.target.closest('a[href*="/games/"]');
+        const isJoin = joinBtn && (
+            joinBtn.classList.contains('bg-action-emphasis')
+            || joinBtn.textContent.trim().toLowerCase() === 'join'
+        );
+        if (!isJoin && !gameLink) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        setFriendJoinHidden(card, true);
+    };
+
+    document.addEventListener('pointerdown', onFriendJoin, true);
+    document.addEventListener('click', onFriendJoin, true);
+
+    const friendObserver = new MutationObserver(() => suppressBlockedFriendJoins());
+    const root = document.documentElement || document.body;
+    if (root) friendObserver.observe(root, { childList: true, subtree: true });
+    suppressBlockedFriendJoins();
+}
+
 const observer = new MutationObserver(() => {
     addBlockButtons();
     hideBlockedGames();
+    suppressBlockedFriendJoins();
 });
 
 // Add this function to detect game page
@@ -425,7 +622,7 @@ function addGamePageBlockButton() {
   const actionSection = document.querySelector('.game-calls-to-action');
   const gameMetaData = document.querySelector('#game-detail-meta-data');
   
-  if (!actionSection || !gameMetaData) return;
+  if (!actionSection || !gameMetaData || actionSection.querySelector('.game-block-btn')) return;
   
   const universeId = gameMetaData.getAttribute('data-universe-id');
   const gameTitle = document.querySelector('h1')?.textContent || universeId;
@@ -446,8 +643,14 @@ function addGamePageBlockButton() {
     e.preventDefault();
     e.stopPropagation();
     if (!blockedGames.some(game => game.id === universeId)) {
-      blockedGames.push({ id: universeId, title: gameTitle });
-      await saveBlockedGamesToStorage(blockedGames);
+        const placeId = getPlaceIdFromUrl();
+        const entry = { id: universeId, title: gameTitle };
+        if (placeId) {
+            entry.placeId = placeId;
+            placeToUniverse.set(String(placeId), String(universeId));
+        }
+        blockedGames.push(entry);
+        await saveBlockedGamesToStorage(blockedGames);
       blockBtn.classList.add('blocked');
       // Redirect to blocked page after blocking
       redirectToBlockedPage(gameTitle, universeId);
@@ -508,6 +711,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Reload storage and reapply blocking
         loadBlockedGamesFromStorage().then(() => {
             hideBlockedGames();
+            suppressBlockedFriendJoins();
             sendResponse({ success: true, games: keywordBlockedGames });
         });
         return true; // Keep channel open for async response
