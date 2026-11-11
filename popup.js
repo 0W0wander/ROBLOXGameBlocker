@@ -1,6 +1,12 @@
 // Current keyset being built
 let currentKeyset = [];
 
+// Parental lock. The hash lives in chrome.storage.local, which Chrome
+// deletes when the extension is removed. Export and import never touch it.
+let parentLock = null;
+let sessionUnlocked = false;
+let pendingUnlockAction = null;
+
 // Tab switching
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', function() {
@@ -84,34 +90,36 @@ document.getElementById('search-input').addEventListener('input', function(e) {
   loadBlockedGames(e.target.value.trim());
 });
 
+function removeBlockedGame(gameId) {
+  chrome.storage.local.get(['blockedGames'], function(result) {
+    if (chrome.runtime.lastError) {
+      console.error('Error loading blocked games:', chrome.runtime.lastError);
+      return;
+    }
+
+    const blockedGames = result.blockedGames || [];
+    const updatedGames = blockedGames.filter(game => game.id !== gameId);
+
+    chrome.storage.local.set({ 'blockedGames': updatedGames }, function() {
+      if (chrome.runtime.lastError) {
+        console.error('Error saving blocked games:', chrome.runtime.lastError);
+        return;
+      }
+      loadBlockedGames();
+    });
+  });
+}
+
 // Handle removing games with error handling
 document.addEventListener('click', function(e) {
   if (e.target.classList.contains('remove-btn')) {
     const gameId = e.target.getAttribute('data-id');
     const keywordId = e.target.getAttribute('data-keyword-id');
-    
-    if (keywordId) {
-      // Remove keyword rule
-      removeKeywordRule(keywordId);
-    } else if (gameId) {
-      // Remove game
-      chrome.storage.local.get(['blockedGames'], function(result) {
-        if (chrome.runtime.lastError) {
-          console.error('Error loading blocked games:', chrome.runtime.lastError);
-          return;
-        }
 
-        const blockedGames = result.blockedGames || [];
-        const updatedGames = blockedGames.filter(game => game.id !== gameId);
-        
-        chrome.storage.local.set({ 'blockedGames': updatedGames }, function() {
-          if (chrome.runtime.lastError) {
-            console.error('Error saving blocked games:', chrome.runtime.lastError);
-            return;
-          }
-          loadBlockedGames();
-        });
-      });
+    if (keywordId) {
+      requireUnlock(function() { removeKeywordRule(keywordId); });
+    } else if (gameId) {
+      requireUnlock(function() { removeBlockedGame(gameId); });
     }
   }
 });
@@ -370,6 +378,219 @@ document.getElementById('import-input').addEventListener('change', function(e) {
   }
 });
 
+// ==================== PARENTAL LOCK ====================
+
+function bytesToHex(bytes) {
+  return Array.from(bytes).map(function(b) {
+    return b.toString(16).padStart(2, '0');
+  }).join('');
+}
+
+function hexToBytes(hex) {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  }
+  return out;
+}
+
+function hexEqual(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+async function hashPassword(password, saltHex) {
+  const salt = saltHex ? hexToBytes(saltHex) : crypto.getRandomValues(new Uint8Array(16));
+  const passwordBytes = new TextEncoder().encode(password);
+  const data = new Uint8Array(salt.length + passwordBytes.length);
+  data.set(salt);
+  data.set(passwordBytes, salt.length);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return {
+    salt: bytesToHex(salt),
+    hash: bytesToHex(new Uint8Array(digest))
+  };
+}
+
+function isLockOn() {
+  return !!(parentLock && parentLock.hash && parentLock.salt);
+}
+
+function updateLockUi() {
+  const button = document.getElementById('lock-btn');
+  const status = document.getElementById('lock-status');
+  const locked = isLockOn();
+  button.textContent = locked ? 'Locked' : 'Lock';
+  button.classList.toggle('locked', locked);
+  if (locked && !sessionUnlocked) {
+    status.hidden = false;
+    status.textContent = 'A password is required to remove blocked games or keywords.';
+  } else if (locked && sessionUnlocked) {
+    status.hidden = false;
+    status.textContent = 'Password accepted. Removing blocks stays available until this window closes.';
+  } else {
+    status.hidden = true;
+    status.textContent = '';
+  }
+}
+
+function setLockError(message) {
+  document.getElementById('lock-error').textContent = message || '';
+}
+
+function openLockPanel(mode) {
+  const panel = document.getElementById('lock-panel');
+  const confirmInput = document.getElementById('lock-confirm');
+  const message = document.getElementById('lock-message');
+  document.getElementById('lock-password').value = '';
+  confirmInput.value = '';
+  setLockError('');
+  const setting = mode === 'set';
+  confirmInput.hidden = !setting;
+  document.getElementById('lock-save').hidden = !setting;
+  document.getElementById('lock-unlock').hidden = setting;
+  document.getElementById('lock-clear').hidden = setting;
+  message.textContent = setting
+    ? 'Set a password so blocked games and keywords cannot be removed without it. Adding blocks, export, and import stay available.'
+    : 'Enter the password to remove blocks, or remove the lock entirely.';
+  panel.hidden = false;
+  document.getElementById('lock-password').focus();
+}
+
+function closeLockPanel() {
+  document.getElementById('lock-panel').hidden = true;
+  document.getElementById('lock-password').value = '';
+  document.getElementById('lock-confirm').value = '';
+  setLockError('');
+  pendingUnlockAction = null;
+}
+
+function requireUnlock(action) {
+  if (!isLockOn() || sessionUnlocked) {
+    action();
+    return;
+  }
+  pendingUnlockAction = action;
+  openLockPanel('unlock');
+}
+
+async function passwordMatches(password) {
+  if (!isLockOn()) return false;
+  const hashed = await hashPassword(password, parentLock.salt);
+  return hexEqual(hashed.hash, parentLock.hash);
+}
+
+function finishUnlock() {
+  sessionUnlocked = true;
+  const action = pendingUnlockAction;
+  pendingUnlockAction = null;
+  closeLockPanel();
+  updateLockUi();
+  if (action) action();
+}
+
+document.getElementById('lock-btn').addEventListener('click', function() {
+  if (document.getElementById('lock-panel').hidden) {
+    openLockPanel(isLockOn() ? 'unlock' : 'set');
+  } else {
+    closeLockPanel();
+  }
+});
+
+document.getElementById('lock-cancel').addEventListener('click', closeLockPanel);
+
+document.getElementById('lock-save').addEventListener('click', async function() {
+  const password = document.getElementById('lock-password').value;
+  const confirm = document.getElementById('lock-confirm').value;
+  if (password.length < 4) {
+    setLockError('Use at least 4 characters.');
+    return;
+  }
+  if (password !== confirm) {
+    setLockError('Passwords do not match.');
+    return;
+  }
+  const hashed = await hashPassword(password);
+  chrome.storage.local.set({ parentLock: hashed }, function() {
+    if (chrome.runtime.lastError) {
+      setLockError('Could not save the password.');
+      return;
+    }
+    parentLock = hashed;
+    sessionUnlocked = false;
+    closeLockPanel();
+    updateLockUi();
+  });
+});
+
+document.getElementById('lock-unlock').addEventListener('click', async function() {
+  const password = document.getElementById('lock-password').value;
+  if (!password) {
+    setLockError('Enter the password.');
+    return;
+  }
+  if (!(await passwordMatches(password))) {
+    setLockError('Wrong password.');
+    return;
+  }
+  finishUnlock();
+});
+
+document.getElementById('lock-clear').addEventListener('click', async function() {
+  const password = document.getElementById('lock-password').value;
+  if (!password) {
+    setLockError('Enter the password.');
+    return;
+  }
+  if (!(await passwordMatches(password))) {
+    setLockError('Wrong password.');
+    return;
+  }
+  chrome.storage.local.remove('parentLock', function() {
+    if (chrome.runtime.lastError) {
+      setLockError('Could not remove the lock.');
+      return;
+    }
+    parentLock = null;
+    sessionUnlocked = false;
+    pendingUnlockAction = null;
+    closeLockPanel();
+    updateLockUi();
+  });
+});
+
+document.getElementById('lock-password').addEventListener('keydown', function(e) {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  if (isLockOn()) {
+    document.getElementById('lock-unlock').click();
+  } else {
+    document.getElementById('lock-confirm').focus();
+  }
+});
+
+document.getElementById('lock-confirm').addEventListener('keydown', function(e) {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  document.getElementById('lock-save').click();
+});
+
+function loadLockState() {
+  chrome.storage.local.get(['parentLock'], function(result) {
+    if (chrome.runtime.lastError) {
+      console.error('Error loading lock:', chrome.runtime.lastError);
+      return;
+    }
+    parentLock = result.parentLock || null;
+    sessionUnlocked = false;
+    updateLockUi();
+  });
+}
+
 // ==================== INITIALIZATION ====================
 
 // Initial load with error handling
@@ -387,4 +608,6 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Load keyword rules
   loadKeywordRules();
+
+  loadLockState();
 });

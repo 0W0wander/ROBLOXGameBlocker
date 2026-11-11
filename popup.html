@@ -9,12 +9,87 @@
       background: #1a1a2e;
       color: #eee;
     }
-    h3 {
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
       margin: 0 0 12px 0;
-      color: #00d4aa;
-      font-weight: 600;
       border-bottom: 2px solid #00d4aa;
       padding-bottom: 8px;
+    }
+    h3 {
+      margin: 0;
+      color: #00d4aa;
+      font-weight: 600;
+    }
+    .lock-btn {
+      background: #16213e;
+      color: #00d4aa;
+      border: 1px solid #00d4aa;
+      border-radius: 6px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-size: 0.8em;
+      white-space: nowrap;
+    }
+    .lock-btn:hover {
+      background: #00d4aa;
+      color: #1a1a2e;
+    }
+    .lock-btn.locked {
+      background: #00d4aa;
+      color: #1a1a2e;
+      font-weight: 600;
+    }
+    .lock-status {
+      color: #888;
+      font-size: 0.75em;
+      margin: -4px 0 10px 0;
+    }
+    .lock-panel {
+      background: #16213e;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .lock-panel[hidden] {
+      display: none;
+    }
+    .lock-message, .lock-hint {
+      color: #888;
+      font-size: 0.75em;
+      margin: 0 0 8px 0;
+      line-height: 1.4;
+    }
+    .lock-hint {
+      margin: 8px 0 0 0;
+    }
+    .lock-panel input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #2a2a4a;
+      border-radius: 6px;
+      box-sizing: border-box;
+      background: #0f0f1e;
+      color: #eee;
+      font-size: 0.9em;
+      margin-bottom: 8px;
+    }
+    .lock-panel input:focus {
+      outline: none;
+      border-color: #00d4aa;
+    }
+    .lock-error {
+      color: #e74c3c;
+      font-size: 0.75em;
+      min-height: 1em;
+      margin: 0 0 8px 0;
+    }
+    .lock-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
     }
     h4 {
       margin: 12px 0 8px 0;
@@ -288,7 +363,24 @@
   </style>
 </head>
 <body>
-  <h3>Roblox Game Blocker</h3>
+  <div class="header-row">
+    <h3>Roblox Game Blocker</h3>
+    <button id="lock-btn" class="lock-btn" type="button">Lock</button>
+  </div>
+  <p id="lock-status" class="lock-status" hidden></p>
+  <div id="lock-panel" class="lock-panel" hidden>
+    <p id="lock-message" class="lock-message"></p>
+    <input type="password" id="lock-password" placeholder="Password" autocomplete="off">
+    <input type="password" id="lock-confirm" placeholder="Confirm password" autocomplete="off">
+    <p id="lock-error" class="lock-error"></p>
+    <div class="lock-actions">
+      <button id="lock-save" class="action-btn" type="button">Set password</button>
+      <button id="lock-unlock" class="action-btn" type="button">Unlock</button>
+      <button id="lock-clear" class="action-btn" type="button">Remove lock</button>
+      <button id="lock-cancel" class="action-btn" type="button">Cancel</button>
+    </div>
+    <p class="lock-hint">Removing the extension deletes this password. Export your list first if you want to keep it.</p>
+  </div>
   
   <div class="tabs">
     <button class="tab active" data-tab="games">Blocked Games</button>
