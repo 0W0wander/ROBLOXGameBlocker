@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Roblox Game Blocker",
-  "version": "0.0.0.8",
+  "version": "0.0.0.9",
   "description": "Hide unwanted Roblox games from your feed. Block games by ID or keywords with AND logic.",
   "permissions": [
     "storage"
